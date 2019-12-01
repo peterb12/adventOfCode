@@ -1,0 +1,20 @@
+name:                advent2019
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/peterb12/advent2019#readme
+license:             BSD3
+license-file:        LICENSE
+author:              peterb
+maintainer:          peterb@gmail.com
+copyright:           2018 peterb
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable advent2019
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5, HUnit
