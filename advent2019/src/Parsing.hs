@@ -11,12 +11,21 @@ type Parser = Parsec Void T.Text
 
 parse = runParser
 
-aModule :: Parser Integer
-aModule = do 
+integer :: Parser Integer
+integer = do 
     i <- lexeme L.decimal
     pure i
+
+int :: Parser Int
+int = do
+    i <- lexeme L.decimal
+    pure i
+    
 lModules :: Parser [Integer]
-lModules = aModule `sepBy` sc
+lModules = integer `sepBy` sc
+
+csvInt :: Parser [Int]
+csvInt = int `sepBy` (char ',')
 
 sc :: Parser ()
 sc = L.space

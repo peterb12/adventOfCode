@@ -7,9 +7,8 @@ import qualified Data.Text.IO as T
 
 day01 :: IO()
 day01 = do 
-  massfile <- readFile "src/data/day01.txt"
-  massfile2 <- T.readFile "src/data/day01.txt"
-  let testParse = parse lModules "" massfile2
+  massfile <- T.readFile "src/data/day01.txt"
+  let testParse = parse lModules "" massfile
   -- There's gotta be a more idiomatic way to deal with the Either here.
   let result = fromRight [] testParse
   putStrLn $ show (sum (map fuelForModuleInclusive result))
