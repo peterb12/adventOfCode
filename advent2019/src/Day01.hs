@@ -1,33 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-} 
-
 module Day01 where
 import Test.HUnit
-import Debug.Trace 
 import Data.Either
-import Data.Void  
-import qualified Data.Text as T
+import Parsing
 import qualified Data.Text.IO as T
-import Text.Megaparsec
-import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
 
 day01 :: IO()
 day01 = do 
   massfile <- readFile "src/data/day01.txt"
   massfile2 <- T.readFile "src/data/day01.txt"
-  let testParse = runParser lModules "" massfile2
+  let testParse = parse lModules "" massfile2
   -- There's gotta be a more idiomatic way to deal with the Either here.
   let result = fromRight [] testParse
   putStrLn $ show (sum (map fuelForModuleInclusive result))
-
-type Parser = Parsec Void T.Text
-
-aModule :: Parser Integer
-aModule = do 
-    i <- lexeme L.decimal
-    pure i
-lModules :: Parser [Integer]
-lModules = aModule `sepBy` sc
 
 --Fuel for module is based on its mass. Specifically, to find the fuel required for 
 --a module, take its mass, divide by three, round down, and subtract 2.
@@ -58,14 +43,3 @@ fuelTests = TestList [TestLabel "testFuel1" testFuel1,
             TestLabel "testFuel5" testFuel5,
             TestLabel "testFuel6" testFuel6,
             TestLabel "testFuel7" testFuel7]
-
--- Megaparsec nonsense and boilerplate, to be refactored out to a helper 
--- module later.
-sc :: Parser ()
-sc = L.space
-  space1                         -- (2)
-  (L.skipLineComment "//")       -- (3)
-  (L.skipBlockComment "/*" "*/") -- (4)
-
-lexeme :: Parser a -> Parser a
-lexeme = L.lexeme sc
