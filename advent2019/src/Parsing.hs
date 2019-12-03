@@ -7,6 +7,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+import Debug.Trace
 type Parser = Parsec Void T.Text
 
 parse = runParser
@@ -26,6 +27,31 @@ lModules = integer `sepBy` sc
 
 csvInt :: Parser [Int]
 csvInt = int `sepBy` (char ',')
+
+data Direction = Up | Down | Lft | Rght deriving Show
+data Motion = M Direction Int deriving Show
+
+motion :: Parser Motion
+motion = do
+  dirGlyph <- (char 'D') <|> char 'U' <|> char 'L' <|> char 'R'
+  mag <- int
+--  let dir = if dirGlyph == 'D' then Down else Up
+  let dir = case dirGlyph of
+        'D' -> Down
+        'U' -> Up
+        'L' -> Lft
+        'R' -> Rght
+        _   -> error "Unexpected direction"
+  return (M dir mag)
+
+turtle :: Parser [Motion]
+turtle =  motion `sepBy` (char ',')
+
+turtles :: Parser ([Motion], [Motion])
+turtles = do
+  a <- turtle
+  b <- turtle
+  return (a,b)
 
 sc :: Parser ()
 sc = L.space
