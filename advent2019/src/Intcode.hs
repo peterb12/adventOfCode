@@ -33,7 +33,7 @@ poke :: Computer -> Int -> Int -> Computer
 poke cmp loc val =  take loc cmp ++ [val] ++ drop (loc + 1) cmp
 
 peek :: Computer -> Int -> Int
-peek = (!!)
+peek cmp x = traceShow x $ cmp !! x
 
 getDigit :: Int -> Int -> Int
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
