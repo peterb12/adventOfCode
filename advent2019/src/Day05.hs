@@ -13,4 +13,4 @@ day05 = do
   let parsed = parse csvInt "" memoryfile
   let memory = fromRight [] parsed
   let final = execute memory 0
-  print (last final)
+  print $ "last bit of memory is " ++ (show (last final))

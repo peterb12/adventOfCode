@@ -33,7 +33,7 @@ poke :: Computer -> Int -> Int -> Computer
 poke cmp loc val =  take loc cmp ++ [val] ++ drop (loc + 1) cmp
 
 peek :: Computer -> Int -> Int
-peek cmp x = traceShow x $ cmp !! x
+peek cmp x = cmp !! x
 
 getDigit :: Int -> Int -> Int
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
@@ -65,15 +65,15 @@ execute cmp pc =
 add :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 add cmp (P mx x) (P my y) (P m3 dest) = poke cmp dest (xval + yval)
   where xval = if mx == Immediate then x else (peek cmp x)
-        yval = if my == Immediate then y else (peek cmp x)
+        yval = if my == Immediate then y else (peek cmp y)
 
 multiply :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 multiply cmp (P mx x) (P my y) (P m3 dest) = poke cmp dest (xval * yval)
   where xval = if mx == Immediate then x else (peek cmp x)
-        yval = if my == Immediate then y else (peek cmp x)
+        yval = if my == Immediate then y else (peek cmp y)
 
 output :: Computer -> Parameter -> Computer
-output cmp (P mx x) = traceShow cmp $ cmp
+output cmp (P mx x) = traceShow xval $ cmp
   where xval = (peek cmp x)
 
 input :: Computer -> Parameter -> Int -> Computer
