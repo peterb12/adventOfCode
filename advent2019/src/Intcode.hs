@@ -11,7 +11,7 @@ type Computer  = [Int]
 data Opcode    = Add | Multiply | Store | Output | Halt deriving Show
 data Mode      = Immediate | Indirect deriving (Eq, Show)
 data Parameter = P Mode Int deriving Show
-data Operation = O Opcode [Parameter] deriving Show
+data Operation = O (Maybe Opcode) [Parameter] deriving Show
 
 opcode :: Int -> Maybe Opcode
 opcode 1  = Just Add
@@ -38,46 +38,30 @@ peek = (!!)
 getDigit :: Int -> Int -> Int
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
 
---fetchInstr :: Computer -> Int -> Maybe Opcode
---fetchInstr cmp = (opcode . peek cmp)
--- TODO: Convert this into a full-fledged thing that decodes parameters
--- as well.
-fetchInstr :: Computer -> Int -> Maybe Operation
-fetchInstr cmp x = Just (O (fromJust opc) (take (opsize opc) ml))
+fetchInstr :: Computer -> Int -> Operation
+fetchInstr cmp x =  (O opc (take (opsize opc) ml))
   where n = peek cmp x
         m1  = intToMode (getDigit n 2)
         m2  = intToMode (getDigit n 3)
         m3  = intToMode (getDigit n 4)
         opc = (opcode (mod n 100))
-        ml  = [m1, m2, m3]
-
-fetchParam :: Computer -> Mode -> Int -> Parameter
-fetchParam cmp Immediate x = P Immediate (peek cmp x)
-fetchParam cmp Indirect  x = P Indirect (peek cmp (peek cmp x))
+        ml  = [P m1 (peek cmp (x+1)), P m2 (peek cmp (x+2)), P m3 (peek cmp (x+3))]
 
 intToMode :: Int -> Mode
 intToMode 0 = Indirect
 intToMode 1 = Immediate
 
 execute :: Computer -> Int -> Computer
-execute = undefined
---
---execute cmp pc =
---  case op of
---    Just Add      -> execute (add cmp x y dest) next
---    Just Multiply -> execute (multiply cmp x y dest) next
---    Just Halt     -> cmp
---    Nothing       -> error "PANIC: Invalid instruction."
---    where op = fetchInstr cmp pc
---          next = pc + opsize op
---          x    = peek cmp (pc + 1)
---          y    = peek cmp (pc + 2)
---          dest = peek cmp (pc + 3)
-
--- The default assumption here is that x and y are pointers.
-add' :: Computer -> Int -> Int -> Int -> Computer
-add' cmp x y dest = poke cmp dest ((peek cmp x) + (peek cmp y))
-
+execute cmp pc =
+  case op of
+    Just Add      -> execute (add cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
+    Just Multiply -> execute (multiply cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
+    Just Halt     -> cmp
+    Just Store    -> execute (input cmp (plist !! 0) 1) next
+    Just Output   -> execute (output cmp (plist !! 0)) next
+    Nothing       -> error "PANIC: Invalid instruction."
+    where all@(O op plist) = fetchInstr cmp pc
+          next = pc + opsize op
 add :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 add cmp (P mx x) (P my y) (P m3 dest) = poke cmp dest (xval + yval)
   where xval = if mx == Immediate then x else (peek cmp x)
@@ -87,6 +71,13 @@ multiply :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 multiply cmp (P mx x) (P my y) (P m3 dest) = poke cmp dest (xval * yval)
   where xval = if mx == Immediate then x else (peek cmp x)
         yval = if my == Immediate then y else (peek cmp x)
+
+output :: Computer -> Parameter -> Computer
+output cmp (P mx x) = traceShow cmp $ cmp
+  where xval = (peek cmp x)
+
+input :: Computer -> Parameter -> Int -> Computer
+input cmp (P mx x) user = poke cmp x user
 
 -- Used in exercise Day02
 search :: Int -> Computer -> Int -> Int -> Int

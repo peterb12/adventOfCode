@@ -19,7 +19,7 @@ integer = do
 
 int :: Parser Int
 int = do
-    i <- lexeme L.decimal
+    i <- L.signed sc (lexeme L.decimal)
     pure i
     
 lModules :: Parser [Integer]
