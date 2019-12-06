@@ -61,3 +61,17 @@ sc = L.space
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
+
+-- Day 6 parsing
+orbit :: Parser (T.Text, T.Text)
+orbit = do
+  a <- T.pack <$> some alphaNumChar
+  char ')'
+  b <- T.pack <$> some alphaNumChar
+  sc
+  return (b,a)
+
+orbits :: Parser [(T.Text, T.Text)]
+orbits = do
+  a <- some orbit
+  return a
