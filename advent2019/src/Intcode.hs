@@ -8,7 +8,7 @@ import Debug.Trace
 -- Some of them contain data.
 
 type Computer  = [Int]
-data Opcode    = Add | Multiply | Store | Output | Halt |
+data Opcode    = Add | Multiply | Input | Output | Halt |
                  JNZ | JEZ | JLT | JEQ deriving Show
 data Mode      = Immediate | Indirect deriving (Eq, Show)
 data Parameter = P Mode Int deriving Show
@@ -17,7 +17,7 @@ data Operation = O (Maybe Opcode) [Parameter] deriving Show
 opcode :: Int -> Maybe Opcode
 opcode 1  = Just Add
 opcode 2  = Just Multiply
-opcode 3  = Just Store
+opcode 3  = Just Input
 opcode 4  = Just Output
 opcode 5  = Just JNZ
 opcode 6  = Just JEZ
@@ -30,7 +30,7 @@ opsize :: Maybe Opcode -> Int
 opsize (Just Add)      = 4
 opsize (Just Multiply) = 4
 opsize (Just Halt)     = 1
-opsize (Just Store)    = 2
+opsize (Just Input)    = 2
 opsize (Just Output)   = 2
 opsize (Just JNZ)      = 3
 opsize (Just JEZ)      = 3
@@ -39,7 +39,7 @@ opsize (Just JEQ)      = 4
 opsize Nothing         = 0
 
 poke :: Computer -> Int -> Int -> Computer
-poke cmp loc val =  traceShow ((show val) ++ " in " ++ (show loc)) $ take loc cmp ++ [val] ++ drop (loc + 1) cmp
+poke cmp loc val = take loc cmp ++ [val] ++ drop (loc + 1) cmp
 
 peek :: Computer -> Int -> Int
 peek cmp x = cmp !! x
@@ -48,13 +48,14 @@ getDigit :: Int -> Int -> Int
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
 
 fetchInstr :: Computer -> Int -> Operation
-fetchInstr cmp x =  (O opc (take (opsize opc) ml))
-  where n = peek cmp x
-        m1  = intToMode (getDigit n 2)
-        m2  = intToMode (getDigit n 3)
-        m3  = intToMode (getDigit n 4)
-        opc = traceShow (mod n 100) $ (opcode (mod n 100))
-        ml  = [P m1 (peek cmp (x+1)), P m2 (peek cmp (x+2)), P m3 (peek cmp (x+3))]
+fetchInstr cmp x = O opc (take (opsize opc) ml)
+  where
+    n   = peek cmp x
+    m1  = intToMode (getDigit n 2)
+    m2  = intToMode (getDigit n 3)
+    m3  = intToMode (getDigit n 4)
+    opc = opcode (mod n 100)
+    ml  = [P m1 (peek cmp (x + 1)), P m2 (peek cmp (x + 2)), P m3 (peek cmp (x + 3))]
 
 intToMode :: Int -> Mode
 intToMode 0 = Indirect
@@ -63,20 +64,34 @@ intToMode 1 = Immediate
 execute :: Computer -> Int -> Computer
 execute cmp pc =
   case op of
-    Just Add      -> execute (add cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
-    Just Multiply -> execute (multiply cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
-    Just Halt     -> cmp
-    Just Store    -> execute (input cmp (plist !! 0) 5) next
-    Just Output   -> execute (output cmp (plist !! 0)) next
-    Just JNZ      -> execute cmp (if jnzDest == pc then next else jnzDest) 
-    Just JEZ      -> execute cmp (if jezDest == pc then next else jezDest)
-    Just JLT      -> execute (jlt cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
-    Just JEQ      -> execute (jeq cmp (plist !! 0) (plist !! 1) (plist !! 2)) next
-    Nothing       -> error "PANIC: Invalid instruction."
-    where all@(O op plist) = traceShow pc $ fetchInstr cmp pc
-          next = pc + opsize op
-          jnzDest = (jnz cmp (plist !! 0) (plist !! 1) pc)
-          jezDest = (jez cmp (plist !! 0) (plist !! 1) pc)
+    Just Add -> execute (add cmp arg1 arg2 arg3) next
+    Just Multiply -> execute (multiply cmp arg1 arg2 arg3) next
+    Just Halt -> cmp
+    Just Input -> execute (input cmp arg1 5) next
+    Just Output -> execute (output cmp arg1) next
+    Just JNZ ->
+      execute
+        cmp
+        (if jnzDest == pc
+           then next
+           else jnzDest)
+    Just JEZ ->
+      execute
+        cmp
+        (if jezDest == pc
+           then next
+           else jezDest)
+    Just JLT -> execute (jlt cmp arg1 arg2 arg3) next
+    Just JEQ -> execute (jeq cmp arg1 arg2 arg3) next
+    Nothing -> error "PANIC: Invalid instruction."
+  where
+    (O op plist) = fetchInstr cmp pc
+    next = pc + opsize op
+    jnzDest = jnz cmp arg1 arg2 pc
+    jezDest = jez cmp arg1 arg2 pc
+    arg1 = plist !! 0
+    arg2 = plist !! 1
+    arg3 = plist !! 2
 
 add :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 add cmp x y (P m3 dest) = poke cmp dest (xval + yval)
@@ -89,8 +104,9 @@ multiply cmp x y (P m3 dest) = poke cmp dest (xval * yval)
         yval = decode cmp y
 
 output :: Computer -> Parameter -> Computer
-output cmp arg = traceShow ("VALUE: " ++ (show xval)) $ cmp
-  where xval = decode cmp arg
+output cmp arg = traceShow ("VALUE: " ++ show xval) $ cmp
+  where
+    xval = decode cmp arg
 
 input :: Computer -> Parameter -> Int -> Computer
 input cmp (P mx x) user =  poke cmp x user
@@ -99,15 +115,17 @@ jnz :: Computer -> Parameter -> Parameter -> Int -> Int
 jnz cmp tst newPC pc =
   case value of
     0 -> pc
-    _ -> (decode cmp newPC)
-    where value = decode cmp tst
+    _ -> decode cmp newPC
+  where
+    value = decode cmp tst
 
 jez :: Computer -> Parameter -> Parameter -> Int -> Int
 jez cmp tst newPC pc =
   case value of
-    0 -> (decode cmp newPC)
+    0 -> decode cmp newPC
     _ -> pc
-    where value = decode cmp tst
+  where
+    value = decode cmp tst
 
 -- Key: "Parameters that an instruction writes to will never be in immediate mode."
 -- So even though our destinations are 'indirect', they are really the final destination.
