@@ -7,7 +7,7 @@ import Debug.Trace
 -- Some of the memory locations are opcodes.
 -- Some of them contain data.
 
-type Computer  = [Int]
+data Computer  = C [Int] [Int] [Int]
 data Opcode    = Add | Multiply | Input | Output | Halt |
                  JNZ | JEZ | JLT | JEQ deriving Show
 data Mode      = Immediate | Indirect deriving (Eq, Show)
@@ -39,10 +39,11 @@ opsize (Just JEQ)      = 4
 opsize Nothing         = 0
 
 poke :: Computer -> Int -> Int -> Computer
-poke cmp loc val = take loc cmp ++ [val] ++ drop (loc + 1) cmp
+poke (C mem inp outp) loc val = C newmem inp outp
+  where newmem = take loc mem ++ [val] ++ drop (loc + 1) mem
 
 peek :: Computer -> Int -> Int
-peek cmp x = cmp !! x
+peek (C mem _ _) x = mem !! x
 
 getDigit :: Int -> Int -> Int
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
@@ -67,7 +68,7 @@ execute cmp pc =
     Just Add -> execute (add cmp arg1 arg2 arg3) next
     Just Multiply -> execute (multiply cmp arg1 arg2 arg3) next
     Just Halt -> cmp
-    Just Input -> execute (input cmp arg1 5) next
+    Just Input -> execute (input cmp arg1) next
     Just Output -> execute (output cmp arg1) next
     Just JNZ ->
       execute
@@ -104,12 +105,12 @@ multiply cmp x y (P m3 dest) = poke cmp dest (xval * yval)
         yval = decode cmp y
 
 output :: Computer -> Parameter -> Computer
-output cmp arg = traceShow ("VALUE: " ++ show xval) $ cmp
+output cmp@(C mem inp outp) arg = traceShow ("VALUE: " ++ show xval) $ (C mem inp (xval:outp))
   where
     xval = decode cmp arg
 
-input :: Computer -> Parameter -> Int -> Computer
-input cmp (P mx x) user =  poke cmp x user
+input :: Computer -> Parameter -> Computer
+input cmp@(C mem (i:is) outp) (P mx x) = poke (C mem is outp) x i
 
 jnz :: Computer -> Parameter -> Parameter -> Int -> Int
 jnz cmp tst newPC pc =

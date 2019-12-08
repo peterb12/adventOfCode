@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-} 
 module Parsing where
+import Data.Char
 import Data.Void  
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -11,6 +12,9 @@ import Debug.Trace
 type Parser = Parsec Void T.Text
 
 parse = runParser
+
+digs :: Parser [Char]
+digs = many digitChar
 
 integer :: Parser Integer
 integer = do 
