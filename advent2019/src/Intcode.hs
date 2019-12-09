@@ -57,7 +57,7 @@ getDigit :: Integer -> Integer -> Integer
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
 
 fetchInstr :: Computer -> Integer -> Operation
-fetchInstr cmp x = O opc (genericTake (opsize opc) ml)
+fetchInstr cmp x = O opc (genericTake ((opsize opc) - 1) ml)
   where
     n   = peek cmp x
     m1  = integerToMode (getDigit n 2)
@@ -73,7 +73,7 @@ integerToMode 2 = Relative
 
 execute :: Computer -> Integer -> Computer
 execute cmp pc =
-  case op of
+  traceShow ((show pc) ++ " " ++ show (O op plist)) $ case op of
     Just Add -> execute (add cmp arg1 arg2 arg3) next
     Just Multiply -> execute (multiply cmp arg1 arg2 arg3) next
     Just Halt -> cmp
@@ -97,7 +97,7 @@ execute cmp pc =
     Nothing -> error "PANIC: Invalid instruction."
   where
     (O op plist) = fetchInstr cmp pc
-    next = traceShow pc $ pc + opsize op
+    next = pc + opsize op
     jnzDest = jnz cmp arg1 arg2 pc
     jezDest = jez cmp arg1 arg2 pc
     arg1 = plist !! 0
@@ -105,23 +105,24 @@ execute cmp pc =
     arg3 = plist !! 2
 
 add :: Computer -> Parameter -> Parameter -> Parameter -> Computer
-add cmp x y (P m3 dest) = poke cmp dest (xval + yval)
+add cmp x y d = poke cmp dest (xval + yval)
   where xval = decode cmp x
         yval = decode cmp y
+        dest = decodeLiteral cmp d
 
 multiply :: Computer -> Parameter -> Parameter -> Parameter -> Computer
-multiply cmp x y (P m3 dest) = poke cmp dest (xval * yval)
+multiply cmp x y d = poke cmp dest (xval * yval)
   where xval = decode cmp x
         yval = decode cmp y
+        dest = decodeLiteral cmp d
 
 output :: Computer -> Parameter -> Computer
-output cmp@(C mem inp outp offs) arg = traceShow ("VALUE: " ++ show xval) $ (C mem inp (xval:outp) offs)
+output cmp@(C mem inp outp offs) arg =  traceShow ("output: " ++ (show xval)) (C mem inp (xval:outp) offs)
   where
-    xval = traceShow ("output: " ++ (show arg)) $ decode cmp arg
+    xval = decode cmp arg
 
 input :: Computer -> Parameter -> Computer
-input cmp@(C mem (i:is) outp offs) (P mx x) = traceShow ("input: " ++ (show i) ++ " at " ++ (show loc) ++ " (x " ++ (show x) ++ " offset " ++ (show offs) ++ ")") $ poke (C mem is outp offs) loc i
-    where loc = decode cmp (P mx x)
+input cmp@(C mem (i:is) outp offs) loc = poke (C mem is outp offs) (decodeLiteral cmp loc) i
 
 jnz :: Computer -> Parameter -> Parameter -> Integer -> Integer
 jnz cmp tst newPC pc =
@@ -142,27 +143,29 @@ jez cmp tst newPC pc =
 -- Key: "Parameters that an instruction writes to will never be in immediate mode."
 -- So even though our destinations are 'indirect', they are really the final destination.
 jlt :: Computer -> Parameter -> Parameter -> Parameter -> Computer
-jlt cmp x y (P _ dest)
-  | (decode cmp x) < (decode cmp y) = poke cmp dest 1
-  | otherwise = poke cmp dest 0
+jlt cmp x y d
+  | (decode cmp x) < (decode cmp y) = poke cmp (decodeLiteral cmp d) 1
+  | otherwise = poke cmp (decodeLiteral cmp d) 0
 
 jeq :: Computer -> Parameter -> Parameter -> Parameter -> Computer
-jeq cmp x y (P _ dest)
-  | (decode cmp x) == (decode cmp y) = poke cmp dest 1
-  | otherwise = poke cmp dest 0
+jeq cmp x y d
+  | (decode cmp x) == (decode cmp y) = poke cmp (decodeLiteral cmp d) 1
+  | otherwise = poke cmp (decodeLiteral cmp d) 0
 
 offset :: Computer -> Parameter -> Computer
---offset cmp@(C mem inp outp offs) adjust = traceShow ("new offset: " ++ (show offs) ++ " and " ++ (show new)) $ C mem inp outp (offs + new)
---  where new = decode cmp adjust
-offset cmp@(C mem inp outp offs) (P mx x) = C mem inp outp (offs+new)
-  where new = decode cmp (P Indirect offs)
+offset cmp@(C mem inp outp offs) (P mx x) = traceShow ("New offset: " ++ (show (offs+new))) $ C mem inp outp (offs+new)
+  where new = decode cmp (P mx x)
   
 decode :: Computer -> Parameter -> Integer
-decode _   (P Immediate x) = x
 decode cmp (P Indirect  x) = peek cmp x
+decode _   (P Immediate x) = x
 --decode cmp@(C _ _ _ offs) (P Relative x) = peek cmp (x + offs)
 decode cmp@(C _ _ _ offs) (P Relative x) = peek cmp (offs + x)
-            
+
+decodeLiteral :: Computer -> Parameter -> Integer
+decodeLiteral cmp@(C _ _ _ offs) (P Relative x) = offs + x
+decodeLiteral cmp (P _ x) = x
+
 -- Used in exercise Day02
 search = undefined
 --search target cmp x y
