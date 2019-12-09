@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Intcode where
+import Data.List
 import Data.Maybe
 import Debug.Trace
 
@@ -7,14 +8,14 @@ import Debug.Trace
 -- Some of the memory locations are opcodes.
 -- Some of them contain data.
 
-data Computer  = C [Int] [Int] [Int]
+data Computer  = C [Integer] [Integer] [Integer] Integer deriving Show
 data Opcode    = Add | Multiply | Input | Output | Halt |
-                 JNZ | JEZ | JLT | JEQ deriving Show
-data Mode      = Immediate | Indirect deriving (Eq, Show)
-data Parameter = P Mode Int deriving Show
+                 JNZ | JEZ | JLT | JEQ | Offset deriving Show
+data Mode      = Immediate | Indirect | Relative deriving (Eq, Show)
+data Parameter = P Mode Integer deriving Show
 data Operation = O (Maybe Opcode) [Parameter] deriving Show
 
-opcode :: Int -> Maybe Opcode
+opcode :: Integer -> Maybe Opcode
 opcode 1  = Just Add
 opcode 2  = Just Multiply
 opcode 3  = Just Input
@@ -23,10 +24,11 @@ opcode 5  = Just JNZ
 opcode 6  = Just JEZ
 opcode 7  = Just JLT
 opcode 8  = Just JEQ
+opcode 9  = Just Offset
 opcode 99 = Just Halt
 opcode _  = Nothing
 
-opsize :: Maybe Opcode -> Int
+opsize :: Maybe Opcode -> Integer
 opsize (Just Add)      = 4
 opsize (Just Multiply) = 4
 opsize (Just Halt)     = 1
@@ -36,33 +38,40 @@ opsize (Just JNZ)      = 3
 opsize (Just JEZ)      = 3
 opsize (Just JLT)      = 4
 opsize (Just JEQ)      = 4
+opsize (Just Offset)   = 2
 opsize Nothing         = 0
 
-poke :: Computer -> Int -> Int -> Computer
-poke (C mem inp outp) loc val = C newmem inp outp
-  where newmem = take loc mem ++ [val] ++ drop (loc + 1) mem
+poke :: Computer -> Integer -> Integer -> Computer
+poke (C mem inp outp offs) loc val = C newmem inp outp offs
+  where newmem = genericTake loc bigmem ++ [val] ++ genericDrop (loc + 1) bigmem
+        bigmem = if (loc > genericLength mem)
+                 then mem ++ (genericTake loc $ repeat 0)
+                 else mem
 
-peek :: Computer -> Int -> Int
-peek (C mem _ _) x = mem !! x
+peek :: Computer -> Integer -> Integer
+peek (C mem _ _ _) x = if (x > genericLength mem)
+                       then 0
+                       else mem !! (fromIntegral x)
 
-getDigit :: Int -> Int -> Int
+getDigit :: Integer -> Integer -> Integer
 getDigit val place = (val `mod` (10 ^ (place+1))) `div` (10 ^ place)
 
-fetchInstr :: Computer -> Int -> Operation
-fetchInstr cmp x = O opc (take (opsize opc) ml)
+fetchInstr :: Computer -> Integer -> Operation
+fetchInstr cmp x = O opc (genericTake (opsize opc) ml)
   where
     n   = peek cmp x
-    m1  = intToMode (getDigit n 2)
-    m2  = intToMode (getDigit n 3)
-    m3  = intToMode (getDigit n 4)
+    m1  = integerToMode (getDigit n 2)
+    m2  = integerToMode (getDigit n 3)
+    m3  = integerToMode (getDigit n 4)
     opc = opcode (mod n 100)
     ml  = [P m1 (peek cmp (x + 1)), P m2 (peek cmp (x + 2)), P m3 (peek cmp (x + 3))]
 
-intToMode :: Int -> Mode
-intToMode 0 = Indirect
-intToMode 1 = Immediate
+integerToMode :: Integer -> Mode
+integerToMode 0 = Indirect
+integerToMode 1 = Immediate
+integerToMode 2 = Relative
 
-execute :: Computer -> Int -> Computer
+execute :: Computer -> Integer -> Computer
 execute cmp pc =
   case op of
     Just Add -> execute (add cmp arg1 arg2 arg3) next
@@ -84,10 +93,11 @@ execute cmp pc =
            else jezDest)
     Just JLT -> execute (jlt cmp arg1 arg2 arg3) next
     Just JEQ -> execute (jeq cmp arg1 arg2 arg3) next
+    Just Offset -> execute (offset cmp arg1) next
     Nothing -> error "PANIC: Invalid instruction."
   where
     (O op plist) = fetchInstr cmp pc
-    next = pc + opsize op
+    next = traceShow pc $ pc + opsize op
     jnzDest = jnz cmp arg1 arg2 pc
     jezDest = jez cmp arg1 arg2 pc
     arg1 = plist !! 0
@@ -105,14 +115,15 @@ multiply cmp x y (P m3 dest) = poke cmp dest (xval * yval)
         yval = decode cmp y
 
 output :: Computer -> Parameter -> Computer
-output cmp@(C mem inp outp) arg = traceShow ("VALUE: " ++ show xval) $ (C mem inp (xval:outp))
+output cmp@(C mem inp outp offs) arg = traceShow ("VALUE: " ++ show xval) $ (C mem inp (xval:outp) offs)
   where
-    xval = decode cmp arg
+    xval = traceShow ("output: " ++ (show arg)) $ decode cmp arg
 
 input :: Computer -> Parameter -> Computer
-input cmp@(C mem (i:is) outp) (P mx x) = poke (C mem is outp) x i
+input cmp@(C mem (i:is) outp offs) (P mx x) = traceShow ("input: " ++ (show i) ++ " at " ++ (show loc) ++ " (x " ++ (show x) ++ " offset " ++ (show offs) ++ ")") $ poke (C mem is outp offs) loc i
+    where loc = decode cmp (P mx x)
 
-jnz :: Computer -> Parameter -> Parameter -> Int -> Int
+jnz :: Computer -> Parameter -> Parameter -> Integer -> Integer
 jnz cmp tst newPC pc =
   case value of
     0 -> pc
@@ -120,7 +131,7 @@ jnz cmp tst newPC pc =
   where
     value = decode cmp tst
 
-jez :: Computer -> Parameter -> Parameter -> Int -> Int
+jez :: Computer -> Parameter -> Parameter -> Integer -> Integer
 jez cmp tst newPC pc =
   case value of
     0 -> decode cmp newPC
@@ -139,13 +150,20 @@ jeq :: Computer -> Parameter -> Parameter -> Parameter -> Computer
 jeq cmp x y (P _ dest)
   | (decode cmp x) == (decode cmp y) = poke cmp dest 1
   | otherwise = poke cmp dest 0
+
+offset :: Computer -> Parameter -> Computer
+--offset cmp@(C mem inp outp offs) adjust = traceShow ("new offset: " ++ (show offs) ++ " and " ++ (show new)) $ C mem inp outp (offs + new)
+--  where new = decode cmp adjust
+offset cmp@(C mem inp outp offs) (P mx x) = C mem inp outp (offs+new)
+  where new = decode cmp (P Indirect offs)
   
-decode :: Computer -> Parameter -> Int
+decode :: Computer -> Parameter -> Integer
 decode _   (P Immediate x) = x
 decode cmp (P Indirect  x) = peek cmp x
+--decode cmp@(C _ _ _ offs) (P Relative x) = peek cmp (x + offs)
+decode cmp@(C _ _ _ offs) (P Relative x) = peek cmp (offs + x)
             
 -- Used in exercise Day02
-search :: Int -> Computer -> Int -> Int -> Int
 search = undefined
 --search target cmp x y
 --  | (peek result 0) == target = ((100 * x) + y)

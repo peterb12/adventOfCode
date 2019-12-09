@@ -18,7 +18,7 @@ digs = many digitChar
 
 integer :: Parser Integer
 integer = do 
-    i <- lexeme L.decimal
+    i <- L.signed sc (lexeme L.decimal)
     pure i
 
 int :: Parser Int
@@ -31,6 +31,9 @@ lModules = integer `sepBy` sc
 
 csvInt :: Parser [Int]
 csvInt = int `sepBy` (char ',')
+
+csvInteger :: Parser [Integer]
+csvInteger = integer `sepBy` (char ',')
 
 data Direction = Up | Down | Lft | Rght deriving Show
 data Motion = M Direction Int deriving Show
