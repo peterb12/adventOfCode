@@ -13,6 +13,21 @@ type Parser = Parsec Void T.Text
 
 parse = runParser
 
+asteroid :: Parser Bool
+asteroid = do
+  item <- (char '#') <|> (char '.')
+  traceM [item]
+  let result = case item of
+        '#' -> True
+        '.' -> False
+  return result
+
+asteroids :: Parser [Bool]
+asteroids = traceShow "ast" $ some asteroid
+
+sector :: Parser [[Bool]]
+sector = traceShow "hi" $ asteroids `sepEndBy` sc
+
 digs :: Parser [Char]
 digs = many digitChar
 
